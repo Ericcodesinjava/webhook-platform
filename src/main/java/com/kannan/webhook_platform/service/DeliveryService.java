@@ -5,7 +5,6 @@ import com.kannan.webhook_platform.entity.Endpoint;
 import com.kannan.webhook_platform.entity.Event;
 import com.kannan.webhook_platform.repository.DeliveryAttemptRepository;
 import org.springframework.http.ResponseEntity;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -24,7 +23,6 @@ public class DeliveryService {
         this.webhookSender = webhookSender;
     }
 
-    @Async
     public void attemptDelivery(Event event, Endpoint endpoint, int attemptNumber) {
         DeliveryAttempt attempt = new DeliveryAttempt();
         attempt.setEventId(event.getId());

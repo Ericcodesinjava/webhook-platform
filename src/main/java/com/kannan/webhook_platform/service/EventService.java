@@ -1,11 +1,11 @@
 package com.kannan.webhook_platform.service;
 
+import com.kannan.webhook_platform.config.KafkaTopicConfig;
 import com.kannan.webhook_platform.entity.DeliveryAttempt;
-import com.kannan.webhook_platform.entity.Endpoint;
 import com.kannan.webhook_platform.entity.Event;
 import com.kannan.webhook_platform.repository.DeliveryAttemptRepository;
-import com.kannan.webhook_platform.repository.EndpointRepository;
 import com.kannan.webhook_platform.repository.EventRepository;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,18 +15,15 @@ import java.util.UUID;
 public class EventService {
 
     private final EventRepository eventRepository;
-    private final EndpointRepository endpointRepository;
-    private final DeliveryService deliveryService;
     private final DeliveryAttemptRepository deliveryAttemptRepository;
+    private final KafkaTemplate<String, String> kafkaTemplate;
 
     public EventService(EventRepository eventRepository,
-                        EndpointRepository endpointRepository,
-                        DeliveryService deliveryService,
-                        DeliveryAttemptRepository deliveryAttemptRepository) {
+                        DeliveryAttemptRepository deliveryAttemptRepository,
+                        KafkaTemplate<String, String> kafkaTemplate) {
         this.eventRepository = eventRepository;
-        this.endpointRepository = endpointRepository;
-        this.deliveryService = deliveryService;
         this.deliveryAttemptRepository = deliveryAttemptRepository;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     public Event ingestEvent(String tenantId, String eventType, String payload) {
@@ -36,13 +33,8 @@ public class EventService {
         event.setPayload(payload);
         Event saved = eventRepository.save(event);
 
-        List<Endpoint> endpoints = endpointRepository.findByTenantId(tenantId);
-        for (Endpoint endpoint : endpoints) {
-            if (endpoint.getSubscribedEventTypes() != null
-                    && endpoint.getSubscribedEventTypes().contains(eventType)) {
-                deliveryService.attemptDelivery(saved, endpoint, 1);
-            }
-        }
+        // Key = tenantId, so one tenant's events stay in order. Value = just the event ID.
+        kafkaTemplate.send(KafkaTopicConfig.EVENTS_TOPIC, tenantId, saved.getId().toString());
 
         return saved;
     }
