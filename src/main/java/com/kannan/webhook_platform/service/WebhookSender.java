@@ -3,7 +3,8 @@ package com.kannan.webhook_platform.service;
 import com.kannan.webhook_platform.entity.Endpoint;
 import com.kannan.webhook_platform.entity.Event;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -18,13 +19,27 @@ import java.util.Base64;
 public class WebhookSender {
 
     private final RestClient restClient;
+    private final CircuitBreakerRegistry registry;
 
-    public WebhookSender() {
+    public WebhookSender(CircuitBreakerRegistry registry) {
         this.restClient = RestClient.create();
+        this.registry = registry;
     }
 
-    @CircuitBreaker(name = "webhookDelivery", fallbackMethod = "sendFallback")
     public ResponseEntity<String> send(Event event, Endpoint endpoint) {
+        // One breaker per endpoint, created on first use from the "webhookDelivery" template
+        CircuitBreaker breaker = registry.circuitBreaker("endpoint-" + endpoint.getId(), "webhookDelivery");
+
+        try {
+            return breaker.executeSupplier(() -> doSend(event, endpoint));
+        } catch (CallNotPermittedException e) {
+            throw new WebhookDeliveryException("Circuit breaker open — endpoint temporarily skipped", e);
+        } catch (RuntimeException e) {
+            throw new WebhookDeliveryException(e.getMessage(), e);
+        }
+    }
+
+    private ResponseEntity<String> doSend(Event event, Endpoint endpoint) {
         String signature = signPayload(event.getPayload(), endpoint.getSecret());
 
         return restClient.post()
@@ -34,15 +49,6 @@ public class WebhookSender {
                 .body(event.getPayload())
                 .retrieve()
                 .toEntity(String.class);
-    }
-
-    // Fires on a real failed call, AND on every call rejected while the breaker is OPEN
-    // (that second case arrives as a CallNotPermittedException, not a real network error).
-    private ResponseEntity<String> sendFallback(Event event, Endpoint endpoint, Throwable t) {
-        String message = (t instanceof CallNotPermittedException)
-                ? "Circuit breaker open — endpoint temporarily skipped"
-                : t.getMessage();
-        throw new WebhookDeliveryException(message, t);
     }
 
     private String signPayload(String payload, String secret) {
