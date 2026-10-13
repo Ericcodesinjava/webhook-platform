@@ -28,15 +28,22 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
   app:
     build: .
     depends_on:
       - db
       - kafka
+      - redis
     environment:
       SPRING_PROFILES_ACTIVE: dev
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATA_REDIS_HOST: redis
     ports:
       - "8080:8080"
 

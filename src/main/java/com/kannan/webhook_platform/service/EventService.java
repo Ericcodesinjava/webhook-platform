@@ -17,23 +17,29 @@ public class EventService {
     private final EventRepository eventRepository;
     private final DeliveryAttemptRepository deliveryAttemptRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final RateLimiter rateLimiter;                                   // NEW
 
     public EventService(EventRepository eventRepository,
                         DeliveryAttemptRepository deliveryAttemptRepository,
-                        KafkaTemplate<String, String> kafkaTemplate) {
+                        KafkaTemplate<String, String> kafkaTemplate,
+                        RateLimiter rateLimiter) {                           // NEW
         this.eventRepository = eventRepository;
         this.deliveryAttemptRepository = deliveryAttemptRepository;
         this.kafkaTemplate = kafkaTemplate;
+        this.rateLimiter = rateLimiter;                                      // NEW
     }
 
     public Event ingestEvent(String tenantId, String eventType, String payload) {
+        if (!rateLimiter.tryAcquire(tenantId)) {                             // NEW
+            throw new RateLimitExceededException(tenantId);                  // NEW
+        }                                                                    // NEW
+
         Event event = new Event();
         event.setTenantId(tenantId);
         event.setEventType(eventType);
         event.setPayload(payload);
         Event saved = eventRepository.save(event);
 
-        // Key = tenantId, so one tenant's events stay in order. Value = just the event ID.
         kafkaTemplate.send(KafkaTopicConfig.EVENTS_TOPIC, tenantId, saved.getId().toString());
 
         return saved;

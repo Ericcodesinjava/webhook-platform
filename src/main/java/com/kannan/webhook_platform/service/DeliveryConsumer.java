@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +32,7 @@ public class DeliveryConsumer {
     }
 
     @KafkaListener(topics = KafkaTopicConfig.EVENTS_TOPIC)
+    @Transactional
     public void onEvent(String eventId) {
         log.info("Kafka message received for event {}", eventId);
 

@@ -35,7 +35,11 @@ public class DeliveryService {
             attempt.setResponseStatusCode(response.getStatusCode().value());
 
         } catch (Exception e) {
-            attempt.setErrorMessage(e.getMessage());
+            String msg = e.getMessage();
+            if (msg != null && msg.length() > 250) {
+                msg = msg.substring(0, 250);
+            }
+            attempt.setErrorMessage(msg);
 
             if (attemptNumber >= MAX_ATTEMPTS) {
                 attempt.setStatus("DEAD_LETTERED");
